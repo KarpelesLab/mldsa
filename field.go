@@ -12,13 +12,13 @@ type nttElement [n]fieldElement
 // Montgomery form constants.
 const (
 	// qInv = q^(-1) mod 2^32
-	qInv = 58728449
+	// qInv = 58728449
 	// qNegInv = -q^(-1) mod 2^32 = 2^32 - qInv*q mod 2^32
 	qNegInv = 4236238847
 	// montR = 2^32 mod q (Montgomery R)
-	montR = 4193792
+	// montR = 4193792
 	// montR2 = 2^64 mod q (Montgomery R^2)
-	montR2 = 2365951
+	// montR2 = 2365951
 	// invN = n^(-1) * R^2 mod q (for inverse NTT scaling)
 	invN = 41978
 )
