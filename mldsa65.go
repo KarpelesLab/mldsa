@@ -9,20 +9,20 @@ import (
 
 // PrivateKey65 is the private key for ML-DSA-65.
 type PrivateKey65 struct {
-	rho [32]byte          // Public seed
-	key [32]byte          // Private seed for signing
-	tr  [64]byte          // H(pk)
-	s1  [l65]ringElement  // Secret vector
-	s2  [k65]ringElement  // Secret vector
-	t0  [k65]ringElement  // Low bits of t
+	rho [32]byte              // Public seed
+	key [32]byte              // Private seed for signing
+	tr  [64]byte              // H(pk)
+	s1  [l65]ringElement      // Secret vector
+	s2  [k65]ringElement      // Secret vector
+	t0  [k65]ringElement      // Low bits of t
 	a   [k65 * l65]nttElement // Matrix A in NTT form
 }
 
 // PublicKey65 is the public key for ML-DSA-65.
 type PublicKey65 struct {
-	rho [32]byte         // Public seed
-	t1  [k65]ringElement // High bits of t
-	tr  [64]byte         // H(pk)
+	rho [32]byte              // Public seed
+	t1  [k65]ringElement      // High bits of t
+	tr  [64]byte              // H(pk)
 	a   [k65 * l65]nttElement // Matrix A in NTT form
 }
 

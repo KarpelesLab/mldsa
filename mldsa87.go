@@ -9,20 +9,20 @@ import (
 
 // PrivateKey87 is the private key for ML-DSA-87.
 type PrivateKey87 struct {
-	rho [32]byte             // Public seed
-	key [32]byte             // Private seed for signing
-	tr  [64]byte             // H(pk)
-	s1  [l87]ringElement     // Secret vector
-	s2  [k87]ringElement     // Secret vector
-	t0  [k87]ringElement     // Low bits of t
+	rho [32]byte              // Public seed
+	key [32]byte              // Private seed for signing
+	tr  [64]byte              // H(pk)
+	s1  [l87]ringElement      // Secret vector
+	s2  [k87]ringElement      // Secret vector
+	t0  [k87]ringElement      // Low bits of t
 	a   [k87 * l87]nttElement // Matrix A in NTT form
 }
 
 // PublicKey87 is the public key for ML-DSA-87.
 type PublicKey87 struct {
-	rho [32]byte             // Public seed
-	t1  [k87]ringElement     // High bits of t
-	tr  [64]byte             // H(pk)
+	rho [32]byte              // Public seed
+	t1  [k87]ringElement      // High bits of t
+	tr  [64]byte              // H(pk)
 	a   [k87 * l87]nttElement // Matrix A in NTT form
 }
 

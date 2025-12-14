@@ -9,20 +9,20 @@ import (
 
 // PrivateKey44 is the private key for ML-DSA-44.
 type PrivateKey44 struct {
-	rho [32]byte             // Public seed
-	key [32]byte             // Private seed for signing
-	tr  [64]byte             // H(pk)
-	s1  [l44]ringElement     // Secret vector
-	s2  [k44]ringElement     // Secret vector
-	t0  [k44]ringElement     // Low bits of t
+	rho [32]byte              // Public seed
+	key [32]byte              // Private seed for signing
+	tr  [64]byte              // H(pk)
+	s1  [l44]ringElement      // Secret vector
+	s2  [k44]ringElement      // Secret vector
+	t0  [k44]ringElement      // Low bits of t
 	a   [k44 * l44]nttElement // Matrix A in NTT form
 }
 
 // PublicKey44 is the public key for ML-DSA-44.
 type PublicKey44 struct {
-	rho [32]byte             // Public seed
-	t1  [k44]ringElement     // High bits of t
-	tr  [64]byte             // H(pk)
+	rho [32]byte              // Public seed
+	t1  [k44]ringElement      // High bits of t
+	tr  [64]byte              // H(pk)
 	a   [k44 * l44]nttElement // Matrix A in NTT form
 }
 
