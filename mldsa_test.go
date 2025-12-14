@@ -2,6 +2,7 @@ package mldsa
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/rand"
 	"testing"
 )
@@ -150,9 +151,9 @@ func TestSignVerifyWithContext65(t *testing.T) {
 	message := []byte("hello, world!")
 	context := []byte("test context")
 
-	sig, err := key.Sign(rand.Reader, message, context)
+	sig, err := key.SignWithContext(rand.Reader, message, context)
 	if err != nil {
-		t.Fatalf("Sign failed: %v", err)
+		t.Fatalf("SignWithContext failed: %v", err)
 	}
 
 	pk := key.PublicKey()
@@ -170,6 +171,58 @@ func TestSignVerifyWithContext65(t *testing.T) {
 	// Verify with no context should fail
 	if pk.Verify(sig, message, nil) {
 		t.Error("Verify returned true for missing context")
+	}
+}
+
+func TestSignWithSignerOpts65(t *testing.T) {
+	key, err := GenerateKey65(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey65 failed: %v", err)
+	}
+
+	message := []byte("hello, world!")
+	context := []byte("test context")
+
+	// Test with SignerOpts containing context
+	opts := &SignerOpts{Context: context}
+	sig, err := key.Sign(rand.Reader, message, opts)
+	if err != nil {
+		t.Fatalf("Sign with SignerOpts failed: %v", err)
+	}
+
+	pk := key.PublicKey()
+	if !pk.Verify(sig, message, context) {
+		t.Error("Verify returned false for valid signature with context via SignerOpts")
+	}
+
+	// Test SignMessage interface
+	sig2, err := key.SignMessage(rand.Reader, message, opts)
+	if err != nil {
+		t.Fatalf("SignMessage failed: %v", err)
+	}
+
+	if !pk.Verify(sig2, message, context) {
+		t.Error("Verify returned false for valid signature from SignMessage")
+	}
+}
+
+func TestSignRejectsPreHashed(t *testing.T) {
+	key, err := GenerateKey65(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey65 failed: %v", err)
+	}
+
+	message := []byte("hello, world!")
+
+	// crypto.SHA256 has HashFunc() != 0, so it should be rejected
+	_, err = key.Sign(rand.Reader, message, crypto.SHA256)
+	if err == nil {
+		t.Error("Sign should reject pre-hashed SignerOpts")
+	}
+
+	_, err = key.SignMessage(rand.Reader, message, crypto.SHA256)
+	if err == nil {
+		t.Error("SignMessage should reject pre-hashed SignerOpts")
 	}
 }
 

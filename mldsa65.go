@@ -265,9 +265,63 @@ func NewPrivateKey65(b []byte) (*PrivateKey65, error) {
 	return sk, nil
 }
 
-// Sign creates a signature for the message with optional context.
+// Public returns the public key corresponding to this private key.
+// This implements the crypto.Signer interface.
+func (sk *PrivateKey65) Public() crypto.PublicKey {
+	// Reconstruct public key from private key components
+	pk := &PublicKey65{
+		rho: sk.rho,
+		tr:  sk.tr,
+		a:   sk.a,
+	}
+	// Compute t1 from s1, s2 via A*s1 + s2, then take high bits
+	var s1NTT [l65]nttElement
+	for i := 0; i < l65; i++ {
+		s1NTT[i] = ntt(sk.s1[i])
+	}
+	for i := 0; i < k65; i++ {
+		var acc nttElement
+		for j := 0; j < l65; j++ {
+			acc = polyAdd(acc, nttMul(sk.a[i*l65+j], s1NTT[j]))
+		}
+		t := polyAdd(invNTT(acc), sk.s2[i])
+		for j := 0; j < n; j++ {
+			pk.t1[i][j], _ = power2Round(t[j])
+		}
+	}
+	return pk
+}
+
+// Sign signs digest with the private key.
+// This implements the crypto.Signer interface.
+//
+// For ML-DSA, the digest is the message to be signed (not a hash).
+// If opts is *SignerOpts, its Context field is used for domain separation.
+// If opts is nil or not *SignerOpts, no context is used.
+func (sk *PrivateKey65) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
+	return sk.SignMessage(rand, digest, opts)
+}
+
+// SignMessage signs msg with the private key.
+// This implements the crypto.MessageSigner interface.
+//
+// If opts is *SignerOpts, its Context field is used for domain separation.
+// If opts is nil or not *SignerOpts, no context is used.
+// Returns an error if opts specifies a hash function, as ML-DSA signs messages directly.
+func (sk *PrivateKey65) SignMessage(rand io.Reader, msg []byte, opts crypto.SignerOpts) ([]byte, error) {
+	if opts != nil && opts.HashFunc() != 0 {
+		return nil, errors.New("mldsa: cannot sign pre-hashed messages")
+	}
+	var context []byte
+	if o, ok := opts.(*SignerOpts); ok && o != nil {
+		context = o.Context
+	}
+	return sk.SignWithContext(rand, msg, context)
+}
+
+// SignWithContext signs a message with an optional context string.
 // Context must be at most 255 bytes.
-func (sk *PrivateKey65) Sign(rand io.Reader, message, context []byte) ([]byte, error) {
+func (sk *PrivateKey65) SignWithContext(rand io.Reader, message, context []byte) ([]byte, error) {
 	if len(context) > 255 {
 		return nil, errors.New("mldsa: context too long")
 	}
@@ -539,7 +593,19 @@ func (pk *PublicKey65) verifyInternal(sig, mPrime []byte) bool {
 	return diff == 0
 }
 
-// Sign creates a signature using the key pair's private key.
-func (key *Key65) Sign(rand io.Reader, message, context []byte) ([]byte, error) {
-	return key.PrivateKey65.Sign(rand, message, context)
+// Sign signs digest with the key pair's private key.
+// This implements the crypto.Signer interface.
+func (key *Key65) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
+	return key.PrivateKey65.Sign(rand, digest, opts)
+}
+
+// SignMessage signs msg with the key pair's private key.
+// This implements the crypto.MessageSigner interface.
+func (key *Key65) SignMessage(rand io.Reader, msg []byte, opts crypto.SignerOpts) ([]byte, error) {
+	return key.PrivateKey65.SignMessage(rand, msg, opts)
+}
+
+// SignWithContext signs a message with an optional context string using the key pair.
+func (key *Key65) SignWithContext(rand io.Reader, message, context []byte) ([]byte, error) {
+	return key.PrivateKey65.SignWithContext(rand, message, context)
 }

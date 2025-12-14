@@ -8,6 +8,7 @@ ML-DSA is a post-quantum digital signature scheme standardized by NIST, designed
 
 - Pure Go implementation with no external dependencies (only standard library)
 - Supports all three security levels: ML-DSA-44, ML-DSA-65, and ML-DSA-87
+- Implements `crypto.Signer` and `crypto.MessageSigner` (Go 1.25+) interfaces
 - Simple, clean API
 - FIPS 204 compliant (validated against NIST ACVP test vectors)
 - MIT licensed
@@ -77,7 +78,7 @@ func main() {
 
     message := []byte("Hello, post-quantum world!")
 
-    // Sign the message (context can be nil or up to 255 bytes)
+    // Sign the message using crypto.Signer interface
     signature, err := key.Sign(rand.Reader, message, nil)
     if err != nil {
         log.Fatal(err)
@@ -99,8 +100,15 @@ ML-DSA supports optional context strings (up to 255 bytes) for domain separation
 ```go
 context := []byte("my-application-v1")
 
-// Sign with context
-signature, err := key.Sign(rand.Reader, message, context)
+// Sign with context using SignWithContext
+signature, err := key.SignWithContext(rand.Reader, message, context)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Or use SignerOpts with the crypto.Signer interface
+opts := &mldsa.SignerOpts{Context: context}
+signature, err = key.Sign(rand.Reader, message, opts)
 if err != nil {
     log.Fatal(err)
 }
@@ -170,19 +178,35 @@ Each security level has three key types:
 
 ```go
 // Key pair methods
-func (key *Key65) Sign(rand io.Reader, message, context []byte) ([]byte, error)
+func (key *Key65) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error)
+func (key *Key65) SignMessage(rand io.Reader, msg []byte, opts crypto.SignerOpts) ([]byte, error)
+func (key *Key65) SignWithContext(rand io.Reader, message, context []byte) ([]byte, error)
 func (key *Key65) PublicKey() *PublicKey65
 func (key *Key65) Bytes() []byte           // Returns 32-byte seed
 func (key *Key65) PrivateKeyBytes() []byte // Returns full private key
 
-// Private key methods
-func (sk *PrivateKey65) Sign(rand io.Reader, message, context []byte) ([]byte, error)
+// Private key methods (implements crypto.Signer and crypto.MessageSigner)
+func (sk *PrivateKey65) Public() crypto.PublicKey
+func (sk *PrivateKey65) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error)
+func (sk *PrivateKey65) SignMessage(rand io.Reader, msg []byte, opts crypto.SignerOpts) ([]byte, error)
+func (sk *PrivateKey65) SignWithContext(rand io.Reader, message, context []byte) ([]byte, error)
 func (sk *PrivateKey65) Bytes() []byte
 
 // Public key methods
 func (pk *PublicKey65) Verify(sig, message, context []byte) bool
 func (pk *PublicKey65) Bytes() []byte
 func (pk *PublicKey65) Equal(other crypto.PublicKey) bool
+```
+
+### SignerOpts
+
+```go
+// SignerOpts implements crypto.SignerOpts for ML-DSA signing operations.
+type SignerOpts struct {
+    Context []byte // Optional context string (max 255 bytes)
+}
+
+func (opts *SignerOpts) HashFunc() crypto.Hash // Returns 0 (ML-DSA signs messages directly)
 ```
 
 ## Constants

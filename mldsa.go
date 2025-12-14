@@ -20,6 +20,8 @@
 //	valid := key.PublicKey().Verify(sig, message, nil)
 package mldsa
 
+import "crypto"
+
 // Global ML-DSA constants from FIPS 204.
 const (
 	// n is the number of coefficients in polynomials.
@@ -117,4 +119,25 @@ const (
 	encodingSize13 = n * 13 / 8 // t0 packed
 	encodingSize18 = n * 18 / 8 // z for gamma1=2^17
 	encodingSize20 = n * 20 / 8 // z for gamma1=2^19
+)
+
+// SignerOpts implements crypto.SignerOpts for ML-DSA signing operations.
+// It allows specifying an optional context string for domain separation.
+type SignerOpts struct {
+	// Context is an optional context string for domain separation (max 255 bytes).
+	// If nil, no context is used.
+	Context []byte
+}
+
+// HashFunc returns 0 to indicate that ML-DSA does not use pre-hashing.
+// ML-DSA signs messages directly rather than message digests.
+func (opts *SignerOpts) HashFunc() crypto.Hash {
+	return 0
+}
+
+// Compile-time interface assertions for crypto.Signer.
+var (
+	_ crypto.Signer = (*PrivateKey44)(nil)
+	_ crypto.Signer = (*PrivateKey65)(nil)
+	_ crypto.Signer = (*PrivateKey87)(nil)
 )
