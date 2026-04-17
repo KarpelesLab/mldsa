@@ -12,25 +12,25 @@ type PrivateKey65 struct {
 	rho [32]byte              // Public seed
 	key [32]byte              // Private seed for signing
 	tr  [64]byte              // H(pk)
-	s1  [l65]ringElement      // Secret vector
-	s2  [k65]ringElement      // Secret vector
-	t0  [k65]ringElement      // Low bits of t
-	a   [k65 * l65]nttElement // Matrix A in NTT form
+	s1  [L65]RingElement      // Secret vector
+	s2  [K65]RingElement      // Secret vector
+	t0  [K65]RingElement      // Low bits of t
+	a   [K65 * L65]NttElement // Matrix A in NTT form
 }
 
 // PublicKey65 is the public key for ML-DSA-65.
 type PublicKey65 struct {
 	rho [32]byte              // Public seed
-	t1  [k65]ringElement      // High bits of t
+	t1  [K65]RingElement      // High bits of t
 	tr  [64]byte              // H(pk)
-	a   [k65 * l65]nttElement // Matrix A in NTT form
+	a   [K65 * L65]NttElement // Matrix A in NTT form
 }
 
 // Key65 is a key pair for ML-DSA-65, containing both private and public components.
 type Key65 struct {
 	PrivateKey65
 	seed [32]byte         // Original seed
-	t1   [k65]ringElement // Public key component
+	t1   [K65]RingElement // Public key component
 }
 
 // GenerateKey65 generates a new ML-DSA-65 key pair.
@@ -59,7 +59,7 @@ func (key *Key65) generate() {
 	// Expand seed: SHAKE256(seed || k || l)
 	h := sha3.NewSHAKE256()
 	h.Write(key.seed[:])
-	h.Write([]byte{k65, l65})
+	h.Write([]byte{K65, L65})
 
 	var expanded [128]byte
 	h.Read(expanded[:])
@@ -69,37 +69,37 @@ func (key *Key65) generate() {
 	copy(key.key[:], expanded[96:128])
 
 	// Generate secret vectors s1, s2
-	for i := 0; i < l65; i++ {
-		key.s1[i] = sampleBoundedPoly(rho1, eta4, uint16(i))
+	for i := 0; i < L65; i++ {
+		key.s1[i] = SampleBoundedPoly(rho1, Eta4, uint16(i))
 	}
-	for i := 0; i < k65; i++ {
-		key.s2[i] = sampleBoundedPoly(rho1, eta4, uint16(l65+i))
+	for i := 0; i < K65; i++ {
+		key.s2[i] = SampleBoundedPoly(rho1, Eta4, uint16(L65+i))
 	}
 
 	// Generate matrix A in NTT form
-	for i := 0; i < k65; i++ {
-		for j := 0; j < l65; j++ {
-			key.a[i*l65+j] = sampleNTTPoly(key.rho[:], byte(j), byte(i))
+	for i := 0; i < K65; i++ {
+		for j := 0; j < L65; j++ {
+			key.a[i*L65+j] = SampleNTTPoly(key.rho[:], byte(j), byte(i))
 		}
 	}
 
 	// Compute t = A*s1 + s2
-	var s1NTT [l65]nttElement
-	for i := 0; i < l65; i++ {
-		s1NTT[i] = ntt(key.s1[i])
+	var s1NTT [L65]NttElement
+	for i := 0; i < L65; i++ {
+		s1NTT[i] = NTT(key.s1[i])
 	}
 
-	var t [k65]ringElement
-	for i := 0; i < k65; i++ {
-		var acc nttElement
-		for j := 0; j < l65; j++ {
-			acc = polyAdd(acc, nttMul(key.a[i*l65+j], s1NTT[j]))
+	var t [K65]RingElement
+	for i := 0; i < K65; i++ {
+		var acc NttElement
+		for j := 0; j < L65; j++ {
+			acc = PolyAdd(acc, NttMul(key.a[i*L65+j], s1NTT[j]))
 		}
-		t[i] = polyAdd(invNTT(acc), key.s2[i])
+		t[i] = PolyAdd(InvNTT(acc), key.s2[i])
 
-		// Power2Round: t = t1*2^d + t0
-		for j := 0; j < n; j++ {
-			key.t1[i][j], key.t0[i][j] = power2Round(t[i][j])
+		// Power2Round: t = t1*2^D + t0
+		for j := 0; j < N; j++ {
+			key.t1[i][j], key.t0[i][j] = Power2Round(t[i][j])
 		}
 	}
 
@@ -115,10 +115,10 @@ func (key *Key65) publicKeyBytes() []byte {
 	b := make([]byte, PublicKeySize65)
 	copy(b[:32], key.rho[:])
 	offset := 32
-	for i := 0; i < k65; i++ {
-		packed := packT1(key.t1[i])
+	for i := 0; i < K65; i++ {
+		packed := PackT1(key.t1[i])
 		copy(b[offset:], packed)
-		offset += encodingSize10
+		offset += EncodingSize10
 	}
 	return b
 }
@@ -153,20 +153,20 @@ func (sk *PrivateKey65) Bytes() []byte {
 	copy(b[64:128], sk.tr[:])
 
 	offset := 128
-	for i := 0; i < l65; i++ {
-		packed := packEta4(sk.s1[i])
+	for i := 0; i < L65; i++ {
+		packed := PackEta4(sk.s1[i])
 		copy(b[offset:], packed)
-		offset += encodingSize4
+		offset += EncodingSize4
 	}
-	for i := 0; i < k65; i++ {
-		packed := packEta4(sk.s2[i])
+	for i := 0; i < K65; i++ {
+		packed := PackEta4(sk.s2[i])
 		copy(b[offset:], packed)
-		offset += encodingSize4
+		offset += EncodingSize4
 	}
-	for i := 0; i < k65; i++ {
-		packed := packT0(sk.t0[i])
+	for i := 0; i < K65; i++ {
+		packed := PackT0(sk.t0[i])
 		copy(b[offset:], packed)
-		offset += encodingSize13
+		offset += EncodingSize13
 	}
 	return b
 }
@@ -176,10 +176,10 @@ func (pk *PublicKey65) Bytes() []byte {
 	b := make([]byte, PublicKeySize65)
 	copy(b[:32], pk.rho[:])
 	offset := 32
-	for i := 0; i < k65; i++ {
-		packed := packT1(pk.t1[i])
+	for i := 0; i < K65; i++ {
+		packed := PackT1(pk.t1[i])
 		copy(b[offset:], packed)
-		offset += encodingSize10
+		offset += EncodingSize10
 	}
 	return b
 }
@@ -203,15 +203,15 @@ func NewPublicKey65(b []byte) (*PublicKey65, error) {
 	copy(pk.rho[:], b[:32])
 
 	offset := 32
-	for i := 0; i < k65; i++ {
-		pk.t1[i] = unpackT1(b[offset : offset+encodingSize10])
-		offset += encodingSize10
+	for i := 0; i < K65; i++ {
+		pk.t1[i] = UnpackT1(b[offset : offset+EncodingSize10])
+		offset += EncodingSize10
 	}
 
 	// Generate A matrix
-	for i := 0; i < k65; i++ {
-		for j := 0; j < l65; j++ {
-			pk.a[i*l65+j] = sampleNTTPoly(pk.rho[:], byte(j), byte(i))
+	for i := 0; i < K65; i++ {
+		for j := 0; j < L65; j++ {
+			pk.a[i*L65+j] = SampleNTTPoly(pk.rho[:], byte(j), byte(i))
 		}
 	}
 
@@ -236,29 +236,29 @@ func NewPrivateKey65(b []byte) (*PrivateKey65, error) {
 
 	offset := 128
 	var err error
-	for i := 0; i < l65; i++ {
-		sk.s1[i], err = unpackEta4(b[offset : offset+encodingSize4])
+	for i := 0; i < L65; i++ {
+		sk.s1[i], err = UnpackEta4(b[offset : offset+EncodingSize4])
 		if err != nil {
 			return nil, err
 		}
-		offset += encodingSize4
+		offset += EncodingSize4
 	}
-	for i := 0; i < k65; i++ {
-		sk.s2[i], err = unpackEta4(b[offset : offset+encodingSize4])
+	for i := 0; i < K65; i++ {
+		sk.s2[i], err = UnpackEta4(b[offset : offset+EncodingSize4])
 		if err != nil {
 			return nil, err
 		}
-		offset += encodingSize4
+		offset += EncodingSize4
 	}
-	for i := 0; i < k65; i++ {
-		sk.t0[i] = unpackT0(b[offset : offset+encodingSize13])
-		offset += encodingSize13
+	for i := 0; i < K65; i++ {
+		sk.t0[i] = UnpackT0(b[offset : offset+EncodingSize13])
+		offset += EncodingSize13
 	}
 
 	// Generate A matrix
-	for i := 0; i < k65; i++ {
-		for j := 0; j < l65; j++ {
-			sk.a[i*l65+j] = sampleNTTPoly(sk.rho[:], byte(j), byte(i))
+	for i := 0; i < K65; i++ {
+		for j := 0; j < L65; j++ {
+			sk.a[i*L65+j] = SampleNTTPoly(sk.rho[:], byte(j), byte(i))
 		}
 	}
 
@@ -275,18 +275,18 @@ func (sk *PrivateKey65) Public() crypto.PublicKey {
 		a:   sk.a,
 	}
 	// Compute t1 from s1, s2 via A*s1 + s2, then take high bits
-	var s1NTT [l65]nttElement
-	for i := 0; i < l65; i++ {
-		s1NTT[i] = ntt(sk.s1[i])
+	var s1NTT [L65]NttElement
+	for i := 0; i < L65; i++ {
+		s1NTT[i] = NTT(sk.s1[i])
 	}
-	for i := 0; i < k65; i++ {
-		var acc nttElement
-		for j := 0; j < l65; j++ {
-			acc = polyAdd(acc, nttMul(sk.a[i*l65+j], s1NTT[j]))
+	for i := 0; i < K65; i++ {
+		var acc NttElement
+		for j := 0; j < L65; j++ {
+			acc = PolyAdd(acc, NttMul(sk.a[i*L65+j], s1NTT[j]))
 		}
-		t := polyAdd(invNTT(acc), sk.s2[i])
-		for j := 0; j < n; j++ {
-			pk.t1[i][j], _ = power2Round(t[j])
+		t := PolyAdd(InvNTT(acc), sk.s2[i])
+		for j := 0; j < N; j++ {
+			pk.t1[i][j], _ = Power2Round(t[j])
 		}
 	}
 	return pk
@@ -362,114 +362,114 @@ func (sk *PrivateKey65) signInternal(rnd, mPrime []byte) ([]byte, error) {
 	h.Read(rhoPrime[:])
 
 	// Precompute NTT of secret vectors
-	var s1NTT [l65]nttElement
-	var s2NTT [k65]nttElement
-	var t0NTT [k65]nttElement
-	for i := 0; i < l65; i++ {
-		s1NTT[i] = ntt(sk.s1[i])
+	var s1NTT [L65]NttElement
+	var s2NTT [K65]NttElement
+	var t0NTT [K65]NttElement
+	for i := 0; i < L65; i++ {
+		s1NTT[i] = NTT(sk.s1[i])
 	}
-	for i := 0; i < k65; i++ {
-		s2NTT[i] = ntt(sk.s2[i])
-		t0NTT[i] = ntt(sk.t0[i])
+	for i := 0; i < K65; i++ {
+		s2NTT[i] = NTT(sk.s2[i])
+		t0NTT[i] = NTT(sk.t0[i])
 	}
 
 	// Rejection sampling loop
 	var seedBuf [66]byte
 	copy(seedBuf[:64], rhoPrime[:])
 
-	for kappa := uint16(0); ; kappa += l65 {
+	for kappa := uint16(0); ; kappa += L65 {
 		// Generate masking vector y
-		var y [l65]ringElement
-		for i := 0; i < l65; i++ {
+		var y [L65]RingElement
+		for i := 0; i < L65; i++ {
 			seedBuf[64] = byte(kappa + uint16(i))
 			seedBuf[65] = byte((kappa + uint16(i)) >> 8)
-			y[i] = expandMask(seedBuf[:], gamma1Bits19)
+			y[i] = ExpandMask(seedBuf[:], Gamma1Bits19)
 		}
 
 		// Compute w = A*y
-		var yNTT [l65]nttElement
-		for i := 0; i < l65; i++ {
-			yNTT[i] = ntt(y[i])
+		var yNTT [L65]NttElement
+		for i := 0; i < L65; i++ {
+			yNTT[i] = NTT(y[i])
 		}
 
-		var w [k65]ringElement
-		var w1 [k65]ringElement
-		for i := 0; i < k65; i++ {
-			var acc nttElement
-			for j := 0; j < l65; j++ {
-				acc = polyAdd(acc, nttMul(sk.a[i*l65+j], yNTT[j]))
+		var w [K65]RingElement
+		var w1 [K65]RingElement
+		for i := 0; i < K65; i++ {
+			var acc NttElement
+			for j := 0; j < L65; j++ {
+				acc = PolyAdd(acc, NttMul(sk.a[i*L65+j], yNTT[j]))
 			}
-			w[i] = invNTT(acc)
+			w[i] = InvNTT(acc)
 
 			// Compute w1 = HighBits(w)
-			for j := 0; j < n; j++ {
-				w1[i][j] = fieldElement(highBits(w[i][j], gamma2QMinus1Div32))
+			for j := 0; j < N; j++ {
+				w1[i][j] = FieldElement(HighBits(w[i][j], Gamma2QMinus1Div32))
 			}
 		}
 
 		// Compute challenge hash c~ = H(mu || w1)
 		h.Reset()
 		h.Write(mu[:])
-		for i := 0; i < k65; i++ {
-			h.Write(packW1_4(w1[i]))
+		for i := 0; i < K65; i++ {
+			h.Write(PackW1_4(w1[i]))
 		}
-		var cTilde [lambda192 / 4]byte
+		var cTilde [Lambda192 / 4]byte
 		h.Read(cTilde[:])
 
 		// Sample challenge polynomial c
-		c := sampleChallenge(cTilde[:], tau49)
-		cNTT := ntt(c)
+		c := SampleChallenge(cTilde[:], Tau49)
+		cNTT := NTT(c)
 
 		// Compute z = y + c*s1
-		var z [l65]ringElement
-		for i := 0; i < l65; i++ {
-			cs1 := invNTT(nttMul(cNTT, s1NTT[i]))
-			z[i] = polyAdd(y[i], cs1)
+		var z [L65]RingElement
+		for i := 0; i < L65; i++ {
+			cs1 := InvNTT(NttMul(cNTT, s1NTT[i]))
+			z[i] = PolyAdd(y[i], cs1)
 		}
 
 		// Check ||z||_inf < gamma1 - beta
-		if vectorInfinityNorm(z[:]) >= gamma1Pow19-beta65 {
+		if VectorInfinityNorm(z[:]) >= Gamma1Pow19-Beta65 {
 			continue
 		}
 
 		// Compute r0 = LowBits(w - c*s2)
-		var r0 [k65][n]int32
-		for i := 0; i < k65; i++ {
-			cs2 := invNTT(nttMul(cNTT, s2NTT[i]))
-			for j := 0; j < n; j++ {
-				_, r0[i][j] = decompose(fieldSub(w[i][j], cs2[j]), gamma2QMinus1Div32)
+		var r0 [K65][N]int32
+		for i := 0; i < K65; i++ {
+			cs2 := InvNTT(NttMul(cNTT, s2NTT[i]))
+			for j := 0; j < N; j++ {
+				_, r0[i][j] = Decompose(fieldSub(w[i][j], cs2[j]), Gamma2QMinus1Div32)
 			}
 		}
 
 		// Check ||r0||_inf < gamma2 - beta
-		if vectorInfinityNormSigned(r0[:]) >= int32(gamma2QMinus1Div32-beta65) {
+		if vectorInfinityNormSigned(r0[:]) >= int32(Gamma2QMinus1Div32-Beta65) {
 			continue
 		}
 
 		// Compute ct0
-		var ct0 [k65]ringElement
-		for i := 0; i < k65; i++ {
-			ct0[i] = invNTT(nttMul(cNTT, t0NTT[i]))
+		var ct0 [K65]RingElement
+		for i := 0; i < K65; i++ {
+			ct0[i] = InvNTT(NttMul(cNTT, t0NTT[i]))
 		}
 
 		// Check ||ct0||_inf < gamma2
-		if vectorInfinityNorm(ct0[:]) >= gamma2QMinus1Div32 {
+		if VectorInfinityNorm(ct0[:]) >= Gamma2QMinus1Div32 {
 			continue
 		}
 
 		// Compute hints
-		var hints [k65]ringElement
-		for i := 0; i < k65; i++ {
-			cs2 := invNTT(nttMul(cNTT, s2NTT[i]))
-			for j := 0; j < n; j++ {
+		var hints [K65]RingElement
+		for i := 0; i < K65; i++ {
+			cs2 := InvNTT(NttMul(cNTT, s2NTT[i]))
+			for j := 0; j < N; j++ {
 				// r = w - cs2, z = ct0
 				r := fieldSub(w[i][j], cs2[j])
-				hints[i][j] = makeHint(ct0[i][j], r, gamma2QMinus1Div32)
+				hints[i][j] = MakeHint(ct0[i][j], r, Gamma2QMinus1Div32)
 			}
 		}
 
 		// Check number of hints <= omega
-		if countOnes(hints[:]) > omega55 {
+		if CountOnes(hints[:]) > Omega55 {
 			continue
 		}
 
@@ -477,12 +477,12 @@ func (sk *PrivateKey65) signInternal(rnd, mPrime []byte) ([]byte, error) {
 		sig := make([]byte, SignatureSize65)
 		copy(sig[:len(cTilde)], cTilde[:])
 		offset := len(cTilde)
-		for i := 0; i < l65; i++ {
-			packed := packZ19(z[i])
+		for i := 0; i < L65; i++ {
+			packed := PackZ19(z[i])
 			copy(sig[offset:], packed)
-			offset += encodingSize20
+			offset += EncodingSize20
 		}
-		hintPacked := packHint(hints[:], omega55)
+		hintPacked := PackHint(hints[:], Omega55)
 		copy(sig[offset:], hintPacked)
 
 		return sig, nil
@@ -520,69 +520,69 @@ func (pk *PublicKey65) verifyInternal(sig, mPrime []byte) bool {
 	h.Read(mu[:])
 
 	// Decode signature
-	cTilde := sig[:lambda192/4]
-	offset := lambda192 / 4
+	cTilde := sig[:Lambda192/4]
+	offset := Lambda192 / 4
 
-	var z [l65]ringElement
-	for i := 0; i < l65; i++ {
-		z[i] = unpackZ19Sig(sig[offset : offset+encodingSize20])
-		offset += encodingSize20
+	var z [L65]RingElement
+	for i := 0; i < L65; i++ {
+		z[i] = UnpackZ19(sig[offset : offset+EncodingSize20])
+		offset += EncodingSize20
 	}
 
 	// Check ||z||_inf < gamma1 - beta
-	if vectorInfinityNorm(z[:]) >= gamma1Pow19-beta65 {
+	if VectorInfinityNorm(z[:]) >= Gamma1Pow19-Beta65 {
 		return false
 	}
 
-	var hints [k65]ringElement
-	if !unpackHint(sig[offset:], hints[:], omega55) {
+	var hints [K65]RingElement
+	if !UnpackHint(sig[offset:], hints[:], Omega55) {
 		return false
 	}
 
 	// Sample challenge
-	c := sampleChallenge(cTilde, tau49)
-	cNTT := ntt(c)
+	c := SampleChallenge(cTilde, Tau49)
+	cNTT := NTT(c)
 
 	// Compute NTT of z
-	var zNTT [l65]nttElement
-	for i := 0; i < l65; i++ {
-		zNTT[i] = ntt(z[i])
+	var zNTT [L65]NttElement
+	for i := 0; i < L65; i++ {
+		zNTT[i] = NTT(z[i])
 	}
 
-	// Compute t1*2^d in NTT form
-	var t1NTT [k65]nttElement
-	for i := 0; i < k65; i++ {
-		var t1Scaled ringElement
-		for j := 0; j < n; j++ {
-			t1Scaled[j] = pk.t1[i][j] << d
+	// Compute t1*2^D in NTT form
+	var t1NTT [K65]NttElement
+	for i := 0; i < K65; i++ {
+		var t1Scaled RingElement
+		for j := 0; j < N; j++ {
+			t1Scaled[j] = pk.t1[i][j] << D
 		}
-		t1NTT[i] = ntt(t1Scaled)
+		t1NTT[i] = NTT(t1Scaled)
 	}
 
-	// Compute w' = A*z - c*t1*2^d
-	var w1 [k65]ringElement
+	// Compute w' = A*z - c*t1*2^D
+	var w1 [K65]RingElement
 	h.Reset()
 	h.Write(mu[:])
 
-	for i := 0; i < k65; i++ {
-		var acc nttElement
-		for j := 0; j < l65; j++ {
-			acc = polyAdd(acc, nttMul(pk.a[i*l65+j], zNTT[j]))
+	for i := 0; i < K65; i++ {
+		var acc NttElement
+		for j := 0; j < L65; j++ {
+			acc = PolyAdd(acc, NttMul(pk.a[i*L65+j], zNTT[j]))
 		}
-		ct1 := nttMul(cNTT, t1NTT[i])
-		acc = polySub(acc, ct1)
-		wApprox := invNTT(acc)
+		ct1 := NttMul(cNTT, t1NTT[i])
+		acc = PolySub(acc, ct1)
+		wApprox := InvNTT(acc)
 
 		// Use hints to recover w1
-		for j := 0; j < n; j++ {
-			w1[i][j] = useHint(hints[i][j], wApprox[j], gamma2QMinus1Div32)
+		for j := 0; j < N; j++ {
+			w1[i][j] = UseHint(hints[i][j], wApprox[j], Gamma2QMinus1Div32)
 		}
 
-		h.Write(packW1_4(w1[i]))
+		h.Write(PackW1_4(w1[i]))
 	}
 
 	// Verify c~ = H(mu || w1)
-	var cTildeCheck [lambda192 / 4]byte
+	var cTildeCheck [Lambda192 / 4]byte
 	h.Read(cTildeCheck[:])
 
 	// Constant-time comparison

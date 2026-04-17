@@ -31,9 +31,9 @@ func TestPackPolyQRoundtrip(t *testing.T) {
 
 func TestFVec44FromRound(t *testing.T) {
 	var f FVec44
-	// fill with some values in [-q/2, q/2]
+	// fill with some values in [-Q/2, Q/2]
 	for i := range f {
-		f[i] = float64((int(i)*31 + 7) % Q) - float64(Q/2)
+		f[i] = float64((int(i)*31+7)%Q) - float64(Q/2)
 	}
 	var s1 [L44]RingElement
 	var s2 [K44]RingElement
@@ -41,7 +41,7 @@ func TestFVec44FromRound(t *testing.T) {
 
 	var g FVec44
 	g.From(s1[:], s2[:])
-	// Round-trip should be identity modulo q (within integer precision).
+	// Round-trip should be identity modulo Q (within integer precision).
 	// Because values were already centered and integer-valued, this should
 	// produce exactly the original values.
 	for i := range f {
@@ -58,7 +58,7 @@ func TestFVec44Excess(t *testing.T) {
 		t.Fatalf("empty FVec should not exceed")
 	}
 	// Put a single 10 in the K part.
-	f[n*L44] = 10
+	f[N*L44] = 10
 	// nu-scaled L2 is 10 (K part unscaled).
 	if f.Excess(9.0, 3.0) != true {
 		t.Fatalf("FVec with K-part value 10 must exceed 9")
@@ -89,9 +89,9 @@ func TestSampleHyperball44Deterministic(t *testing.T) {
 		t.Fatalf("SampleHyperball44 must be deterministic for fixed seed/nonce")
 	}
 
-	// ν-scaled L2 norm. The sampler normalizes `sq` over `n*(k+l)+2` Gaussian
-	// samples but only returns `n*(k+l)` of them, so the norm is ≤ r and
-	// close to r*sqrt(1 - 2/(n*(k+l)+2)) on average.
+	// ν-scaled L2 norm. The sampler normalizes `sq` over `N*(k+l)+2` Gaussian
+	// samples but only returns `N*(k+l)` of them, so the norm is ≤ r and
+	// close to r*sqrt(1 - 2/(N*(k+l)+2)) on average.
 	var sq float64
 	for i := 0; i < N*(K44+L44); i++ {
 		v := a[i]

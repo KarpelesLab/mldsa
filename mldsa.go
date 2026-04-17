@@ -24,14 +24,14 @@ import "crypto"
 
 // Global ML-DSA constants from FIPS 204.
 const (
-	// n is the number of coefficients in polynomials.
-	n = 256
+	// N is the number of coefficients in polynomials.
+	N = 256
 
-	// q is the modulus: q = 2^23 - 2^13 + 1 = 8380417
-	q = 8380417
+	// Q is the modulus: Q = 2^23 - 2^13 + 1 = 8380417
+	Q = 8380417
 
-	// d is the number of dropped bits from t.
-	d = 13
+	// D is the number of dropped bits from t.
+	D = 13
 
 	// SeedSize is the size of the random seed used for key generation.
 	SeedSize = 32
@@ -39,86 +39,86 @@ const (
 
 // Derived constants.
 const (
-	qMinus1Div2 = (q - 1) / 2
+	QMinus1Div2 = (Q - 1) / 2
 )
 
 // Security level specific constants.
 const (
 	// gamma2 values for different modes
-	gamma2QMinus1Div88 = (q - 1) / 88 // ML-DSA-44
-	gamma2QMinus1Div32 = (q - 1) / 32 // ML-DSA-65, ML-DSA-87
+	Gamma2QMinus1Div88 = (Q - 1) / 88 // ML-DSA-44
+	Gamma2QMinus1Div32 = (Q - 1) / 32 // ML-DSA-65, ML-DSA-87
 
 	// gamma1 values (coefficient range of y)
-	gamma1Bits17 = 17
-	gamma1Bits19 = 19
-	gamma1Pow17  = 1 << gamma1Bits17 // ML-DSA-44
-	gamma1Pow19  = 1 << gamma1Bits19 // ML-DSA-65, ML-DSA-87
+	Gamma1Bits17 = 17
+	Gamma1Bits19 = 19
+	Gamma1Pow17  = 1 << Gamma1Bits17 // ML-DSA-44
+	Gamma1Pow19  = 1 << Gamma1Bits19 // ML-DSA-65, ML-DSA-87
 
 	// eta values (private key coefficient range)
-	eta2 = 2 // ML-DSA-44, ML-DSA-87
-	eta4 = 4 // ML-DSA-65
+	Eta2 = 2 // ML-DSA-44, ML-DSA-87
+	Eta4 = 4 // ML-DSA-65
 
 	// tau values (number of ±1s in challenge polynomial)
-	tau39 = 39 // ML-DSA-44
-	tau49 = 49 // ML-DSA-65
-	tau60 = 60 // ML-DSA-87
+	Tau39 = 39 // ML-DSA-44
+	Tau49 = 49 // ML-DSA-65
+	Tau60 = 60 // ML-DSA-87
 
 	// omega values (max number of 1s in hint)
-	omega80 = 80 // ML-DSA-44
-	omega55 = 55 // ML-DSA-65
-	omega75 = 75 // ML-DSA-87
+	Omega80 = 80 // ML-DSA-44
+	Omega55 = 55 // ML-DSA-65
+	Omega75 = 75 // ML-DSA-87
 
 	// lambda values (collision strength of c-tilde)
-	lambda128 = 128 // ML-DSA-44
-	lambda192 = 192 // ML-DSA-65
-	lambda256 = 256 // ML-DSA-87
+	Lambda128 = 128 // ML-DSA-44
+	Lambda192 = 192 // ML-DSA-65
+	Lambda256 = 256 // ML-DSA-87
 )
 
 // ML-DSA-44 parameters.
 const (
-	k44 = 4
-	l44 = 4
+	K44 = 4
+	L44 = 4
 
-	beta44 = eta2 * tau39
+	Beta44 = Eta2 * Tau39
 
-	PublicKeySize44  = 32 + k44*n*10/8
-	PrivateKeySize44 = 32 + 32 + 64 + (k44+l44)*n*3/8 + k44*n*13/8
-	SignatureSize44  = lambda128/4 + l44*n*18/8 + omega80 + k44
+	PublicKeySize44  = 32 + K44*N*10/8
+	PrivateKeySize44 = 32 + 32 + 64 + (K44+L44)*N*3/8 + K44*N*13/8
+	SignatureSize44  = Lambda128/4 + L44*N*18/8 + Omega80 + K44
 )
 
 // ML-DSA-65 parameters.
 const (
-	k65 = 6
-	l65 = 5
+	K65 = 6
+	L65 = 5
 
-	beta65 = eta4 * tau49
+	Beta65 = Eta4 * Tau49
 
-	PublicKeySize65  = 32 + k65*n*10/8
-	PrivateKeySize65 = 32 + 32 + 64 + (k65+l65)*n*4/8 + k65*n*13/8
-	SignatureSize65  = lambda192/4 + l65*n*20/8 + omega55 + k65
+	PublicKeySize65  = 32 + K65*N*10/8
+	PrivateKeySize65 = 32 + 32 + 64 + (K65+L65)*N*4/8 + K65*N*13/8
+	SignatureSize65  = Lambda192/4 + L65*N*20/8 + Omega55 + K65
 )
 
 // ML-DSA-87 parameters.
 const (
-	k87 = 8
-	l87 = 7
+	K87 = 8
+	L87 = 7
 
-	beta87 = eta2 * tau60
+	Beta87 = Eta2 * Tau60
 
-	PublicKeySize87  = 32 + k87*n*10/8
-	PrivateKeySize87 = 32 + 32 + 64 + (k87+l87)*n*3/8 + k87*n*13/8
-	SignatureSize87  = lambda256/4 + l87*n*20/8 + omega75 + k87
+	PublicKeySize87  = 32 + K87*N*10/8
+	PrivateKeySize87 = 32 + 32 + 64 + (K87+L87)*N*3/8 + K87*N*13/8
+	SignatureSize87  = Lambda256/4 + L87*N*20/8 + Omega75 + K87
 )
 
 // Encoding size constants (bytes per polynomial).
 const (
-	encodingSize3  = n * 3 / 8  // eta=2 packed
-	encodingSize4  = n * 4 / 8  // eta=4 packed or 4-bit w1
-	encodingSize6  = n * 6 / 8  // 6-bit w1 for ML-DSA-44
-	encodingSize10 = n * 10 / 8 // t1 packed
-	encodingSize13 = n * 13 / 8 // t0 packed
-	encodingSize18 = n * 18 / 8 // z for gamma1=2^17
-	encodingSize20 = n * 20 / 8 // z for gamma1=2^19
+	EncodingSize3  = N * 3 / 8  // eta=2 packed
+	EncodingSize4  = N * 4 / 8  // eta=4 packed or 4-bit w1
+	EncodingSize6  = N * 6 / 8  // 6-bit w1 for ML-DSA-44
+	EncodingSize10 = N * 10 / 8 // t1 packed
+	EncodingSize13 = N * 13 / 8 // t0 packed
+	EncodingSize18 = N * 18 / 8 // z for gamma1=2^17
+	EncodingSize20 = N * 20 / 8 // z for gamma1=2^19
 )
 
 // SignerOpts implements crypto.SignerOpts for ML-DSA signing operations.

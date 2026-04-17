@@ -12,25 +12,25 @@ type PrivateKey87 struct {
 	rho [32]byte              // Public seed
 	key [32]byte              // Private seed for signing
 	tr  [64]byte              // H(pk)
-	s1  [l87]ringElement      // Secret vector
-	s2  [k87]ringElement      // Secret vector
-	t0  [k87]ringElement      // Low bits of t
-	a   [k87 * l87]nttElement // Matrix A in NTT form
+	s1  [L87]RingElement      // Secret vector
+	s2  [K87]RingElement      // Secret vector
+	t0  [K87]RingElement      // Low bits of t
+	a   [K87 * L87]NttElement // Matrix A in NTT form
 }
 
 // PublicKey87 is the public key for ML-DSA-87.
 type PublicKey87 struct {
 	rho [32]byte              // Public seed
-	t1  [k87]ringElement      // High bits of t
+	t1  [K87]RingElement      // High bits of t
 	tr  [64]byte              // H(pk)
-	a   [k87 * l87]nttElement // Matrix A in NTT form
+	a   [K87 * L87]NttElement // Matrix A in NTT form
 }
 
 // Key87 is a key pair for ML-DSA-87.
 type Key87 struct {
 	PrivateKey87
 	seed [32]byte         // Original seed
-	t1   [k87]ringElement // Public key component
+	t1   [K87]RingElement // Public key component
 }
 
 // GenerateKey87 generates a new ML-DSA-87 key pair.
@@ -57,7 +57,7 @@ func NewKey87(seed []byte) (*Key87, error) {
 func (key *Key87) generate() {
 	h := sha3.NewSHAKE256()
 	h.Write(key.seed[:])
-	h.Write([]byte{k87, l87})
+	h.Write([]byte{K87, L87})
 
 	var expanded [128]byte
 	h.Read(expanded[:])
@@ -66,34 +66,34 @@ func (key *Key87) generate() {
 	rho1 := expanded[32:96]
 	copy(key.key[:], expanded[96:128])
 
-	for i := 0; i < l87; i++ {
-		key.s1[i] = sampleBoundedPoly(rho1, eta2, uint16(i))
+	for i := 0; i < L87; i++ {
+		key.s1[i] = SampleBoundedPoly(rho1, Eta2, uint16(i))
 	}
-	for i := 0; i < k87; i++ {
-		key.s2[i] = sampleBoundedPoly(rho1, eta2, uint16(l87+i))
+	for i := 0; i < K87; i++ {
+		key.s2[i] = SampleBoundedPoly(rho1, Eta2, uint16(L87+i))
 	}
 
-	for i := 0; i < k87; i++ {
-		for j := 0; j < l87; j++ {
-			key.a[i*l87+j] = sampleNTTPoly(key.rho[:], byte(j), byte(i))
+	for i := 0; i < K87; i++ {
+		for j := 0; j < L87; j++ {
+			key.a[i*L87+j] = SampleNTTPoly(key.rho[:], byte(j), byte(i))
 		}
 	}
 
-	var s1NTT [l87]nttElement
-	for i := 0; i < l87; i++ {
-		s1NTT[i] = ntt(key.s1[i])
+	var s1NTT [L87]NttElement
+	for i := 0; i < L87; i++ {
+		s1NTT[i] = NTT(key.s1[i])
 	}
 
-	var t [k87]ringElement
-	for i := 0; i < k87; i++ {
-		var acc nttElement
-		for j := 0; j < l87; j++ {
-			acc = polyAdd(acc, nttMul(key.a[i*l87+j], s1NTT[j]))
+	var t [K87]RingElement
+	for i := 0; i < K87; i++ {
+		var acc NttElement
+		for j := 0; j < L87; j++ {
+			acc = PolyAdd(acc, NttMul(key.a[i*L87+j], s1NTT[j]))
 		}
-		t[i] = polyAdd(invNTT(acc), key.s2[i])
+		t[i] = PolyAdd(InvNTT(acc), key.s2[i])
 
-		for j := 0; j < n; j++ {
-			key.t1[i][j], key.t0[i][j] = power2Round(t[i][j])
+		for j := 0; j < N; j++ {
+			key.t1[i][j], key.t0[i][j] = Power2Round(t[i][j])
 		}
 	}
 
@@ -107,10 +107,10 @@ func (key *Key87) publicKeyBytes() []byte {
 	b := make([]byte, PublicKeySize87)
 	copy(b[:32], key.rho[:])
 	offset := 32
-	for i := 0; i < k87; i++ {
-		packed := packT1(key.t1[i])
+	for i := 0; i < K87; i++ {
+		packed := PackT1(key.t1[i])
 		copy(b[offset:], packed)
-		offset += encodingSize10
+		offset += EncodingSize10
 	}
 	return b
 }
@@ -145,20 +145,20 @@ func (sk *PrivateKey87) Bytes() []byte {
 	copy(b[64:128], sk.tr[:])
 
 	offset := 128
-	for i := 0; i < l87; i++ {
-		packed := packEta2(sk.s1[i])
+	for i := 0; i < L87; i++ {
+		packed := PackEta2(sk.s1[i])
 		copy(b[offset:], packed)
-		offset += encodingSize3
+		offset += EncodingSize3
 	}
-	for i := 0; i < k87; i++ {
-		packed := packEta2(sk.s2[i])
+	for i := 0; i < K87; i++ {
+		packed := PackEta2(sk.s2[i])
 		copy(b[offset:], packed)
-		offset += encodingSize3
+		offset += EncodingSize3
 	}
-	for i := 0; i < k87; i++ {
-		packed := packT0(sk.t0[i])
+	for i := 0; i < K87; i++ {
+		packed := PackT0(sk.t0[i])
 		copy(b[offset:], packed)
-		offset += encodingSize13
+		offset += EncodingSize13
 	}
 	return b
 }
@@ -168,10 +168,10 @@ func (pk *PublicKey87) Bytes() []byte {
 	b := make([]byte, PublicKeySize87)
 	copy(b[:32], pk.rho[:])
 	offset := 32
-	for i := 0; i < k87; i++ {
-		packed := packT1(pk.t1[i])
+	for i := 0; i < K87; i++ {
+		packed := PackT1(pk.t1[i])
 		copy(b[offset:], packed)
-		offset += encodingSize10
+		offset += EncodingSize10
 	}
 	return b
 }
@@ -195,14 +195,14 @@ func NewPublicKey87(b []byte) (*PublicKey87, error) {
 	copy(pk.rho[:], b[:32])
 
 	offset := 32
-	for i := 0; i < k87; i++ {
-		pk.t1[i] = unpackT1(b[offset : offset+encodingSize10])
-		offset += encodingSize10
+	for i := 0; i < K87; i++ {
+		pk.t1[i] = UnpackT1(b[offset : offset+EncodingSize10])
+		offset += EncodingSize10
 	}
 
-	for i := 0; i < k87; i++ {
-		for j := 0; j < l87; j++ {
-			pk.a[i*l87+j] = sampleNTTPoly(pk.rho[:], byte(j), byte(i))
+	for i := 0; i < K87; i++ {
+		for j := 0; j < L87; j++ {
+			pk.a[i*L87+j] = SampleNTTPoly(pk.rho[:], byte(j), byte(i))
 		}
 	}
 
@@ -226,28 +226,28 @@ func NewPrivateKey87(b []byte) (*PrivateKey87, error) {
 
 	offset := 128
 	var err error
-	for i := 0; i < l87; i++ {
-		sk.s1[i], err = unpackEta2(b[offset : offset+encodingSize3])
+	for i := 0; i < L87; i++ {
+		sk.s1[i], err = UnpackEta2(b[offset : offset+EncodingSize3])
 		if err != nil {
 			return nil, err
 		}
-		offset += encodingSize3
+		offset += EncodingSize3
 	}
-	for i := 0; i < k87; i++ {
-		sk.s2[i], err = unpackEta2(b[offset : offset+encodingSize3])
+	for i := 0; i < K87; i++ {
+		sk.s2[i], err = UnpackEta2(b[offset : offset+EncodingSize3])
 		if err != nil {
 			return nil, err
 		}
-		offset += encodingSize3
+		offset += EncodingSize3
 	}
-	for i := 0; i < k87; i++ {
-		sk.t0[i] = unpackT0(b[offset : offset+encodingSize13])
-		offset += encodingSize13
+	for i := 0; i < K87; i++ {
+		sk.t0[i] = UnpackT0(b[offset : offset+EncodingSize13])
+		offset += EncodingSize13
 	}
 
-	for i := 0; i < k87; i++ {
-		for j := 0; j < l87; j++ {
-			sk.a[i*l87+j] = sampleNTTPoly(sk.rho[:], byte(j), byte(i))
+	for i := 0; i < K87; i++ {
+		for j := 0; j < L87; j++ {
+			sk.a[i*L87+j] = SampleNTTPoly(sk.rho[:], byte(j), byte(i))
 		}
 	}
 
@@ -264,18 +264,18 @@ func (sk *PrivateKey87) Public() crypto.PublicKey {
 		a:   sk.a,
 	}
 	// Compute t1 from s1, s2 via A*s1 + s2, then take high bits
-	var s1NTT [l87]nttElement
-	for i := 0; i < l87; i++ {
-		s1NTT[i] = ntt(sk.s1[i])
+	var s1NTT [L87]NttElement
+	for i := 0; i < L87; i++ {
+		s1NTT[i] = NTT(sk.s1[i])
 	}
-	for i := 0; i < k87; i++ {
-		var acc nttElement
-		for j := 0; j < l87; j++ {
-			acc = polyAdd(acc, nttMul(sk.a[i*l87+j], s1NTT[j]))
+	for i := 0; i < K87; i++ {
+		var acc NttElement
+		for j := 0; j < L87; j++ {
+			acc = PolyAdd(acc, NttMul(sk.a[i*L87+j], s1NTT[j]))
 		}
-		t := polyAdd(invNTT(acc), sk.s2[i])
-		for j := 0; j < n; j++ {
-			pk.t1[i][j], _ = power2Round(t[j])
+		t := PolyAdd(InvNTT(acc), sk.s2[i])
+		for j := 0; j < N; j++ {
+			pk.t1[i][j], _ = Power2Round(t[j])
 		}
 	}
 	return pk
@@ -350,111 +350,111 @@ func (sk *PrivateKey87) signInternal(rnd, mPrime []byte) ([]byte, error) {
 	var rhoPrime [64]byte
 	h.Read(rhoPrime[:])
 
-	var s1NTT [l87]nttElement
-	var s2NTT [k87]nttElement
-	var t0NTT [k87]nttElement
-	for i := 0; i < l87; i++ {
-		s1NTT[i] = ntt(sk.s1[i])
+	var s1NTT [L87]NttElement
+	var s2NTT [K87]NttElement
+	var t0NTT [K87]NttElement
+	for i := 0; i < L87; i++ {
+		s1NTT[i] = NTT(sk.s1[i])
 	}
-	for i := 0; i < k87; i++ {
-		s2NTT[i] = ntt(sk.s2[i])
-		t0NTT[i] = ntt(sk.t0[i])
+	for i := 0; i < K87; i++ {
+		s2NTT[i] = NTT(sk.s2[i])
+		t0NTT[i] = NTT(sk.t0[i])
 	}
 
 	var seedBuf [66]byte
 	copy(seedBuf[:64], rhoPrime[:])
 
-	for kappa := uint16(0); ; kappa += l87 {
-		var y [l87]ringElement
-		for i := 0; i < l87; i++ {
+	for kappa := uint16(0); ; kappa += L87 {
+		var y [L87]RingElement
+		for i := 0; i < L87; i++ {
 			seedBuf[64] = byte(kappa + uint16(i))
 			seedBuf[65] = byte((kappa + uint16(i)) >> 8)
-			y[i] = expandMask(seedBuf[:], gamma1Bits19)
+			y[i] = ExpandMask(seedBuf[:], Gamma1Bits19)
 		}
 
-		var yNTT [l87]nttElement
-		for i := 0; i < l87; i++ {
-			yNTT[i] = ntt(y[i])
+		var yNTT [L87]NttElement
+		for i := 0; i < L87; i++ {
+			yNTT[i] = NTT(y[i])
 		}
 
-		var w [k87]ringElement
-		var w1 [k87]ringElement
-		for i := 0; i < k87; i++ {
-			var acc nttElement
-			for j := 0; j < l87; j++ {
-				acc = polyAdd(acc, nttMul(sk.a[i*l87+j], yNTT[j]))
+		var w [K87]RingElement
+		var w1 [K87]RingElement
+		for i := 0; i < K87; i++ {
+			var acc NttElement
+			for j := 0; j < L87; j++ {
+				acc = PolyAdd(acc, NttMul(sk.a[i*L87+j], yNTT[j]))
 			}
-			w[i] = invNTT(acc)
+			w[i] = InvNTT(acc)
 
-			for j := 0; j < n; j++ {
-				w1[i][j] = fieldElement(highBits(w[i][j], gamma2QMinus1Div32))
+			for j := 0; j < N; j++ {
+				w1[i][j] = FieldElement(HighBits(w[i][j], Gamma2QMinus1Div32))
 			}
 		}
 
 		h.Reset()
 		h.Write(mu[:])
-		for i := 0; i < k87; i++ {
-			h.Write(packW1_4(w1[i]))
+		for i := 0; i < K87; i++ {
+			h.Write(PackW1_4(w1[i]))
 		}
-		var cTilde [lambda256 / 4]byte
+		var cTilde [Lambda256 / 4]byte
 		h.Read(cTilde[:])
 
-		c := sampleChallenge(cTilde[:], tau60)
-		cNTT := ntt(c)
+		c := SampleChallenge(cTilde[:], Tau60)
+		cNTT := NTT(c)
 
-		var z [l87]ringElement
-		for i := 0; i < l87; i++ {
-			cs1 := invNTT(nttMul(cNTT, s1NTT[i]))
-			z[i] = polyAdd(y[i], cs1)
+		var z [L87]RingElement
+		for i := 0; i < L87; i++ {
+			cs1 := InvNTT(NttMul(cNTT, s1NTT[i]))
+			z[i] = PolyAdd(y[i], cs1)
 		}
 
-		if vectorInfinityNorm(z[:]) >= gamma1Pow19-beta87 {
+		if VectorInfinityNorm(z[:]) >= Gamma1Pow19-Beta87 {
 			continue
 		}
 
-		var r0 [k87][n]int32
-		for i := 0; i < k87; i++ {
-			cs2 := invNTT(nttMul(cNTT, s2NTT[i]))
-			for j := 0; j < n; j++ {
-				_, r0[i][j] = decompose(fieldSub(w[i][j], cs2[j]), gamma2QMinus1Div32)
+		var r0 [K87][N]int32
+		for i := 0; i < K87; i++ {
+			cs2 := InvNTT(NttMul(cNTT, s2NTT[i]))
+			for j := 0; j < N; j++ {
+				_, r0[i][j] = Decompose(fieldSub(w[i][j], cs2[j]), Gamma2QMinus1Div32)
 			}
 		}
 
-		if vectorInfinityNormSigned(r0[:]) >= int32(gamma2QMinus1Div32-beta87) {
+		if vectorInfinityNormSigned(r0[:]) >= int32(Gamma2QMinus1Div32-Beta87) {
 			continue
 		}
 
-		var ct0 [k87]ringElement
-		for i := 0; i < k87; i++ {
-			ct0[i] = invNTT(nttMul(cNTT, t0NTT[i]))
+		var ct0 [K87]RingElement
+		for i := 0; i < K87; i++ {
+			ct0[i] = InvNTT(NttMul(cNTT, t0NTT[i]))
 		}
 
-		if vectorInfinityNorm(ct0[:]) >= gamma2QMinus1Div32 {
+		if VectorInfinityNorm(ct0[:]) >= Gamma2QMinus1Div32 {
 			continue
 		}
 
-		var hints [k87]ringElement
-		for i := 0; i < k87; i++ {
-			cs2 := invNTT(nttMul(cNTT, s2NTT[i]))
-			for j := 0; j < n; j++ {
+		var hints [K87]RingElement
+		for i := 0; i < K87; i++ {
+			cs2 := InvNTT(NttMul(cNTT, s2NTT[i]))
+			for j := 0; j < N; j++ {
 				r := fieldSub(w[i][j], cs2[j])
-				hints[i][j] = makeHint(ct0[i][j], r, gamma2QMinus1Div32)
+				hints[i][j] = MakeHint(ct0[i][j], r, Gamma2QMinus1Div32)
 			}
 		}
 
-		if countOnes(hints[:]) > omega75 {
+		if CountOnes(hints[:]) > Omega75 {
 			continue
 		}
 
 		sig := make([]byte, SignatureSize87)
 		copy(sig[:len(cTilde)], cTilde[:])
 		offset := len(cTilde)
-		for i := 0; i < l87; i++ {
-			packed := packZ19(z[i])
+		for i := 0; i < L87; i++ {
+			packed := PackZ19(z[i])
 			copy(sig[offset:], packed)
-			offset += encodingSize20
+			offset += EncodingSize20
 		}
-		hintPacked := packHint(hints[:], omega75)
+		hintPacked := PackHint(hints[:], Omega75)
 		copy(sig[offset:], hintPacked)
 
 		return sig, nil
@@ -491,62 +491,62 @@ func (pk *PublicKey87) verifyInternal(sig, mPrime []byte) bool {
 	var mu [64]byte
 	h.Read(mu[:])
 
-	cTilde := sig[:lambda256/4]
-	offset := lambda256 / 4
+	cTilde := sig[:Lambda256/4]
+	offset := Lambda256 / 4
 
-	var z [l87]ringElement
-	for i := 0; i < l87; i++ {
-		z[i] = unpackZ19Sig(sig[offset : offset+encodingSize20])
-		offset += encodingSize20
+	var z [L87]RingElement
+	for i := 0; i < L87; i++ {
+		z[i] = UnpackZ19(sig[offset : offset+EncodingSize20])
+		offset += EncodingSize20
 	}
 
-	if vectorInfinityNorm(z[:]) >= gamma1Pow19-beta87 {
+	if VectorInfinityNorm(z[:]) >= Gamma1Pow19-Beta87 {
 		return false
 	}
 
-	var hints [k87]ringElement
-	if !unpackHint(sig[offset:], hints[:], omega75) {
+	var hints [K87]RingElement
+	if !UnpackHint(sig[offset:], hints[:], Omega75) {
 		return false
 	}
 
-	c := sampleChallenge(cTilde, tau60)
-	cNTT := ntt(c)
+	c := SampleChallenge(cTilde, Tau60)
+	cNTT := NTT(c)
 
-	var zNTT [l87]nttElement
-	for i := 0; i < l87; i++ {
-		zNTT[i] = ntt(z[i])
+	var zNTT [L87]NttElement
+	for i := 0; i < L87; i++ {
+		zNTT[i] = NTT(z[i])
 	}
 
-	var t1NTT [k87]nttElement
-	for i := 0; i < k87; i++ {
-		var t1Scaled ringElement
-		for j := 0; j < n; j++ {
-			t1Scaled[j] = pk.t1[i][j] << d
+	var t1NTT [K87]NttElement
+	for i := 0; i < K87; i++ {
+		var t1Scaled RingElement
+		for j := 0; j < N; j++ {
+			t1Scaled[j] = pk.t1[i][j] << D
 		}
-		t1NTT[i] = ntt(t1Scaled)
+		t1NTT[i] = NTT(t1Scaled)
 	}
 
-	var w1 [k87]ringElement
+	var w1 [K87]RingElement
 	h.Reset()
 	h.Write(mu[:])
 
-	for i := 0; i < k87; i++ {
-		var acc nttElement
-		for j := 0; j < l87; j++ {
-			acc = polyAdd(acc, nttMul(pk.a[i*l87+j], zNTT[j]))
+	for i := 0; i < K87; i++ {
+		var acc NttElement
+		for j := 0; j < L87; j++ {
+			acc = PolyAdd(acc, NttMul(pk.a[i*L87+j], zNTT[j]))
 		}
-		ct1 := nttMul(cNTT, t1NTT[i])
-		acc = polySub(acc, ct1)
-		wApprox := invNTT(acc)
+		ct1 := NttMul(cNTT, t1NTT[i])
+		acc = PolySub(acc, ct1)
+		wApprox := InvNTT(acc)
 
-		for j := 0; j < n; j++ {
-			w1[i][j] = useHint(hints[i][j], wApprox[j], gamma2QMinus1Div32)
+		for j := 0; j < N; j++ {
+			w1[i][j] = UseHint(hints[i][j], wApprox[j], Gamma2QMinus1Div32)
 		}
 
-		h.Write(packW1_4(w1[i]))
+		h.Write(PackW1_4(w1[i]))
 	}
 
-	var cTildeCheck [lambda256 / 4]byte
+	var cTildeCheck [Lambda256 / 4]byte
 	h.Read(cTildeCheck[:])
 
 	var diff byte

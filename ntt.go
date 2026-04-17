@@ -1,9 +1,9 @@
 package mldsa
 
 // zetas contains the precomputed twiddle factors for NTT in Montgomery form.
-// zetas[k] = 1753^(bitrev(k)) * R mod q for k = 0..255
-// where 1753 is a primitive 512th root of unity mod q and R = 2^32.
-var zetas = [n]fieldElement{
+// zetas[k] = 1753^(bitrev(k)) * R mod Q for k = 0..255
+// where 1753 is a primitive 512th root of unity mod Q and R = 2^32.
+var zetas = [N]FieldElement{
 	4193792, 25847, 5771523, 7861508, 237124, 7602457, 7504169, 466468,
 	1826347, 2353451, 8021166, 6288512, 3119733, 5495562, 3111497, 2680103,
 	2725464, 1024112, 7300517, 3585928, 7830929, 7260833, 2619752, 6271868,
@@ -38,13 +38,13 @@ var zetas = [n]fieldElement{
 	7826001, 3919660, 8332111, 7018208, 3937738, 1400424, 7534263, 1976782,
 }
 
-// ntt performs the Number Theoretic Transform on a polynomial.
+// NTT performs the Number Theoretic Transform on a polynomial.
 // The input is in standard form, output is in NTT form (bit-reversed order).
 // Implements FIPS 204 Algorithm 41.
-func ntt(f ringElement) nttElement {
+func NTT(f RingElement) NttElement {
 	k := 1
 	for length := 128; length >= 1; length /= 2 {
-		for start := 0; start < n; start += 2 * length {
+		for start := 0; start < N; start += 2 * length {
 			zeta := zetas[k]
 			k++
 			// Process butterfly pairs
@@ -57,17 +57,17 @@ func ntt(f ringElement) nttElement {
 			}
 		}
 	}
-	return nttElement(f)
+	return NttElement(f)
 }
 
-// invNTT performs the inverse Number Theoretic Transform.
+// InvNTT performs the inverse Number Theoretic Transform.
 // Input is in NTT form, output is in standard polynomial form.
 // Implements FIPS 204 Algorithm 42.
-func invNTT(f nttElement) ringElement {
+func InvNTT(f NttElement) RingElement {
 	k := 255
-	for length := 1; length < n; length *= 2 {
-		for start := 0; start < n; start += 2 * length {
-			zeta := q - zetas[k] // -zeta
+	for length := 1; length < N; length *= 2 {
+		for start := 0; start < N; start += 2 * length {
+			zeta := Q - zetas[k] // -zeta
 			k--
 			fLo := f[start : start+length]
 			fHi := f[start+length : start+2*length]
@@ -78,16 +78,16 @@ func invNTT(f nttElement) ringElement {
 			}
 		}
 	}
-	// Scale by n^(-1) in Montgomery form
+	// Scale by N^(-1) in Montgomery form
 	for i := range f {
 		f[i] = fieldMul(f[i], invN)
 	}
-	return ringElement(f)
+	return RingElement(f)
 }
 
-// nttMul performs component-wise multiplication of two NTT-domain polynomials.
-func nttMul(a, b nttElement) nttElement {
-	var c nttElement
+// NttMul performs component-wise multiplication of two NTT-domain polynomials.
+func NttMul(a, b NttElement) NttElement {
+	var c NttElement
 	for i := range c {
 		c[i] = fieldMul(a[i], b[i])
 	}
