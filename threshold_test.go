@@ -110,6 +110,92 @@ func TestSampleHyperball44Deterministic(t *testing.T) {
 	}
 }
 
+func TestCTISqrt64(t *testing.T) {
+	// Perfect squares and boundaries.
+	for _, n := range []uint64{0, 1, 2, 3, 4, 15, 16, 17, 24, 25, 26, 99, 100, 101, 129637, 1 << 30, (1 << 32) - 1, 1 << 40, 1 << 50} {
+		got := ctISqrt64(n)
+		want := uint64(math.Sqrt(float64(n)))
+		// float sqrt may round up on large values; clamp want = floor via check
+		if want*want > n {
+			want--
+		}
+		if (want+1)*(want+1) <= n {
+			want++
+		}
+		if got != want {
+			t.Errorf("ctISqrt64(%d) = %d, want %d (got²=%d, (got+1)²=%d)", n, got, want, got*got, (got+1)*(got+1))
+		}
+	}
+	// Random-ish spot checks: every returned s must satisfy s² ≤ n < (s+1)².
+	for i := uint64(0); i < 1024; i++ {
+		n := i*12345 + 7
+		s := ctISqrt64(n)
+		if s*s > n {
+			t.Errorf("ctISqrt64(%d) = %d, but %d² = %d > n", n, s, s, s*s)
+		}
+		if (s+1)*(s+1) <= n && (s+1)*(s+1) != 0 { // guard overflow
+			t.Errorf("ctISqrt64(%d) = %d, but (%d)² = %d ≤ n", n, s, s+1, (s+1)*(s+1))
+		}
+	}
+}
+
+func TestCTICeilSqrt64(t *testing.T) {
+	for _, tc := range []struct {
+		n, want uint64
+	}{
+		{0, 0}, {1, 1}, {2, 2}, {3, 2}, {4, 2}, {5, 3},
+		{15, 4}, {16, 4}, {17, 5}, {25, 5}, {26, 6},
+		{129637, 361}, {131200, 363},
+	} {
+		got := ctICeilSqrt64(tc.n)
+		if got != tc.want {
+			t.Errorf("ctICeilSqrt64(%d) = %d, want %d", tc.n, got, tc.want)
+		}
+	}
+}
+
+func TestHyperballCDTMonotone(t *testing.T) {
+	for i := 1; i < hyperballCDTSize; i++ {
+		if hyperballCDT[i] < hyperballCDT[i-1] {
+			t.Fatalf("CDT not monotone: CDT[%d]=%d < CDT[%d]=%d", i, hyperballCDT[i], i-1, hyperballCDT[i-1])
+		}
+	}
+	// Last entry should cover nearly all the mass.
+	if hyperballCDT[hyperballCDTSize-1] < (1<<63)+(1<<62) {
+		t.Errorf("CDT tail too light: last entry = %d", hyperballCDT[hyperballCDTSize-1])
+	}
+}
+
+func TestSampleHyperball44NormBound(t *testing.T) {
+	// Upper bound ||p||_ν ≤ r must hold for every seed (guaranteed by
+	// ctICeilSqrt64). Sample across many seeds and verify.
+	const r, nu = 252778.0, 3.0
+	for trial := 0; trial < 64; trial++ {
+		var rhop [64]byte
+		for i := range rhop {
+			rhop[i] = byte(trial*17 + i)
+		}
+		var p FVec44
+		SampleHyperball44(&p, r, nu, rhop, uint16(trial))
+		var sq float64
+		for i := 0; i < N*(K44+L44); i++ {
+			v := p[i]
+			if i < N*L44 {
+				sq += v * v / (nu * nu)
+			} else {
+				sq += v * v
+			}
+		}
+		norm := math.Sqrt(sq)
+		if norm > r {
+			t.Errorf("trial %d: norm %v exceeds r %v", trial, norm, r)
+		}
+		if norm < r*0.99 {
+			t.Errorf("trial %d: norm %v below 0.99·r", trial, norm)
+		}
+	}
+}
+
 func TestPower2RoundReconstructs(t *testing.T) {
 	for _, r := range []FieldElement{0, 1, Q / 2, Q - 1, 123456, 7654321} {
 		r1, r0 := Power2Round(r)

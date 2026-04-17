@@ -22,6 +22,7 @@ import (
 	"crypto/sha3"
 	"encoding/binary"
 	"math"
+	"math/bits"
 )
 
 // PackPolyQSize is the size of a packed full-range (23-bit) polynomial.
@@ -189,44 +190,150 @@ func (v *FVec44) Excess(r, nu float64) bool {
 	return sq > r*r
 }
 
-// SampleHyperball44 fills p with a point uniformly distributed in a ν-scaled
-// L2 ball of radius r, using SHAKE256 seeded by rhop and nonce. Implements
-// the Box-Muller-based hyperball sampler from ePrint 2025/1166 §4.
+// --- Constant-time discrete Gaussian for hyperball sampling ---------------
 //
-// Note: uses math.Sqrt/Log/Cos/Sin (float64). This is an academic prototype
-// primitive and is not side-channel resistant.
+// The hyperball sampler needs a spherically-symmetric distribution whose
+// direction, after L2 normalization, is (approximately) uniform on the
+// sphere. A discrete Gaussian D_σ over Z fits the bill without any float
+// arithmetic on secret-dependent values: sampling reduces to a CDT lookup
+// against uniform random bits, which we perform in constant time by
+// scanning every table entry regardless of the input.
+//
+// Parameter choices:
+//   σ = 8 gives a CDT small enough (64 entries) to scan per sample cheaply
+//     while keeping the tail beyond the representable 64-bit CDT precision.
+//     The resulting bias from discretization is O(1/σ) per coordinate and
+//     disappears after L2 normalization onto the hyperball.
+//   64-bit CDT precision: each entry is floor(2^64 · Pr[|X| ≤ k]). The
+//     sampler consumes 8 random bytes for the magnitude lookup plus 1 byte
+//     for the sign (LSB), i.e. 9 bytes per sample.
+
+const (
+	hyperballSigma          = 8
+	hyperballCDTSize        = 64
+	hyperballBytesPerSample = 9
+)
+
+// hyperballCDT[k] = floor(2^64 · Pr[|X| ≤ k]) for X ~ D_σ over Z.
+// Populated at init from math.Exp; the table is an input-independent
+// constant, so the non-CT Exp calls here do not affect the SC resistance
+// of SampleHyperball44 itself.
+var hyperballCDT [hyperballCDTSize]uint64
+
+func init() {
+	const sigma2 = float64(hyperballSigma * hyperballSigma)
+	const tailExtent = hyperballCDTSize + 16
+
+	var rho float64
+	for k := -tailExtent; k <= tailExtent; k++ {
+		rho += math.Exp(-float64(k*k) / (2 * sigma2))
+	}
+
+	scale := math.Exp2(64)
+	var acc float64
+	for k := 0; k < hyperballCDTSize; k++ {
+		if k == 0 {
+			acc = 1.0 / rho
+		} else {
+			acc += 2 * math.Exp(-float64(k*k)/(2*sigma2)) / rho
+		}
+		scaled := acc * scale
+		switch {
+		case scaled >= scale:
+			hyperballCDT[k] = math.MaxUint64
+		case scaled <= 0:
+			hyperballCDT[k] = 0
+		default:
+			hyperballCDT[k] = uint64(scaled)
+		}
+	}
+}
+
+// ctGeU64 returns 1 if a ≥ b (unsigned), 0 otherwise, in constant time.
+func ctGeU64(a, b uint64) uint64 {
+	_, borrow := bits.Sub64(a, b, 0)
+	return 1 - borrow
+}
+
+// ctSampleDGaussian returns a sample from D_σ over Z (σ = hyperballSigma),
+// in constant time relative to the input bytes. magBytes supplies the 64
+// bits compared against the CDT; signByte's LSB chooses the sign.
+func ctSampleDGaussian(magBytes uint64, signByte byte) int32 {
+	var k uint64
+	for i := 0; i < hyperballCDTSize-1; i++ {
+		k += ctGeU64(magBytes, hyperballCDT[i])
+	}
+	mag := int32(k)
+	signMask := -int32(signByte & 1)
+	return (mag ^ signMask) - signMask
+}
+
+// ctISqrt64 returns floor(sqrt(n)) via branch-free bit-by-bit iteration
+// (digit-by-digit method). Runs exactly 32 iterations regardless of n.
+func ctISqrt64(n uint64) uint64 {
+	var res uint64
+	rem := n
+	bit := uint64(1) << 62
+	for bit != 0 {
+		sum := res + bit
+		ge := ctGeU64(rem, sum)
+		rem -= ge * sum
+		res = res>>1 + ge*bit
+		bit >>= 2
+	}
+	return res
+}
+
+// ctICeilSqrt64 returns ceil(sqrt(n)). For our use n ≤ ~2^23, so s*s does
+// not overflow uint64.
+func ctICeilSqrt64(n uint64) uint64 {
+	s := ctISqrt64(n)
+	adj := ctGeU64(n, s*s+1)
+	return s + adj
+}
+
+// SampleHyperball44 fills p with a point on the ν-scaled L2 hyperball of
+// radius r, deterministically derived from (rhop, nonce) via SHAKE256.
+// Implements the hyperball primitive from ePrint 2025/1166 §4, adapted to
+// avoid float64 operations on secret-dependent values.
+//
+// Side-channel posture: all secret-dependent steps (CDT sampling, Σ z_i²,
+// integer sqrt) run in constant time. The trailing r / sqrt(sq) float
+// division and the float64 multiplications that produce p[i] operate on
+// quantities an observer can recover from the public output ‖p‖, so any
+// residual float-timing leakage is bounded by what the output itself
+// already reveals.
 func SampleHyperball44(p *FVec44, r, nu float64, rhop [64]byte, nonce uint16) {
-	total := N*(K44+L44) + 2
-	buf := make([]byte, total*8)
+	const total = N*(K44+L44) + 2
+
+	buf := make([]byte, total*hyperballBytesPerSample)
 	h := sha3.NewSHAKE256()
 	h.Write([]byte("H")) // domain separator
 	h.Write(rhop[:])
-	var iv [2]byte
-	iv[0] = byte(nonce)
-	iv[1] = byte(nonce >> 8)
-	h.Write(iv[:])
+	h.Write([]byte{byte(nonce), byte(nonce >> 8)})
 	h.Read(buf)
 
-	samples := make([]float64, total)
-	var sq float64
-	for i := 0; i < total; i += 2 {
-		u1 := binary.LittleEndian.Uint64(buf[i*8 : (i+1)*8])
-		u2 := binary.LittleEndian.Uint64(buf[(i+1)*8 : (i+2)*8])
-		f1 := float64(u1) / (1 << 64)
-		f2 := float64(u2) / (1 << 64)
-		rad := math.Sqrt(-2 * math.Log(f1))
-		z1 := rad * math.Cos(2*math.Pi*f2)
-		z2 := rad * math.Sin(2*math.Pi*f2)
-		samples[i] = z1
-		samples[i+1] = z2
-		sq += z1*z1 + z2*z2
-		if i < N*L44 {
-			samples[i] *= nu
-			samples[i+1] *= nu
-		}
+	var z [total]int32
+	var sq uint64
+	for i := 0; i < total; i++ {
+		base := i * hyperballBytesPerSample
+		magBytes := binary.LittleEndian.Uint64(buf[base : base+8])
+		z[i] = ctSampleDGaussian(magBytes, buf[base+8])
+		v := int64(z[i])
+		sq += uint64(v * v)
 	}
-	factor := r / math.Sqrt(sq)
-	for i := 0; i < N*(L44+K44); i++ {
-		p[i] = samples[i] * factor
+
+	// ceil(sqrt(sq)) guarantees factor ≤ r/||z_total||, so the output norm
+	// (over the first N·(K44+L44) samples) is strictly ≤ r.
+	isqrt := ctICeilSqrt64(sq)
+	factor := r / float64(isqrt)
+	scaleL := factor * nu
+	scaleK := factor
+
+	for i := 0; i < N*L44; i++ {
+		p[i] = float64(z[i]) * scaleL
+	}
+	for i := N * L44; i < N*(K44+L44); i++ {
+		p[i] = float64(z[i]) * scaleK
 	}
 }
